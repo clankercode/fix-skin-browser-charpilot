@@ -1,25 +1,26 @@
 #!/usr/bin/env bash
-# Build the skin-browser CharacterPilot fix: language check, stage, hot-load.
+# Build the skin-browser CharacterPilot fix.
 #
 #   ./build.sh            check + stage + load into the running game (RemoteBuild)
 #   ./build.sh --stage    check + stage only
+#   ./build.sh release    check + build a versioned .op in the repo
 #
 # Env: PLUGINS_DIR (default $OPENPLANET_DIR/Plugins, OPENPLANET_DIR default ~/OpenplanetNext),
 #      TM_PLUGIN_SKIP_LSP=1 to skip the check, TM_PLUGIN_REMOTE_HOST to force the RemoteBuild host.
 set -euo pipefail
 cd "$(dirname "$0")"
 slug="fix-skin-browser-charpilot"
-load=1
-for arg in "$@"; do
-  case "$arg" in
-    --stage) load=0 ;;
-    *) echo "usage: ./build.sh [--stage]" >&2; exit 2 ;;
-  esac
-done
+usage() { printf 'usage: ./build.sh [--stage|release]\n' >&2; exit 2; }
+(( $# <= 1 )) || usage
+mode="${1-}"
+case "$mode" in
+  ''|--stage|release) ;;
+  *) usage ;;
+esac
 op_dir="${OPENPLANET_DIR:-$HOME/OpenplanetNext}"
 plugins_dir="${PLUGINS_DIR:-$op_dir/Plugins}"
 dest="$plugins_dir/$slug"
-myplugins="$(cd ../../my-plugins && pwd)"   # sibling plugin checkouts (tm-control-mcp, mlhook, ...)
+myplugins="$(cd .. && pwd)"   # sibling plugin checkouts (tm-control-mcp, mlhook, ...)
 
 lsp() {
   if [[ "${TM_PLUGIN_SKIP_LSP:-0}" == "1" ]]; then return 0; fi
@@ -27,12 +28,27 @@ lsp() {
 }
 
 lsp .
+if [[ "$mode" == release ]]; then
+  version=$(sed -nE 's/^version[[:space:]]*=[[:space:]]*"([0-9A-Za-z.+-]+)".*/\1/p' info.toml)
+  if [[ -z "$version" ]]; then
+    printf 'error: no version in info.toml\n' >&2
+    exit 1
+  fi
+  archive="$slug-$version.op"
+  tmp=$(mktemp -d)
+  trap 'rm -rf -- "$tmp"' EXIT
+  zip -q -X -j "$tmp/$archive" info.toml src/*.as
+  mv -fT -- "$tmp/$archive" "$archive"
+  printf 'built %s\n' "$archive"
+  exit 0
+fi
+
 mkdir -p "$dest"
 rsync -a --delete src/ "$dest/"
 cp info.toml "$dest/info.toml"
 lsp "$dest"
 echo "staged $slug -> $dest"
-[[ "$load" == 1 ]] || exit 0
+[[ "$mode" != --stage ]] || exit 0
 
 log="$op_dir/Openplanet.log"
 before=$(stat -c %s "$log")
