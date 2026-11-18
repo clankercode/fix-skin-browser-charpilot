@@ -1,0 +1,9 @@
+[meta]
+name     = "Fix Skin Browser Char Pilot"
+author   = "XertroV"
+category = "Development"
+version  = "0.1.0"
+
+[script]
+module = "FixSkinBrowserCharPilot"
+timeout = 15000
